@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAX ENTERPRIESES ORDER SYSTEM</title>
+    <title>MAX ENTERPRISES ORDER SYSTEM</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -20,15 +20,16 @@
         }
     </script>
     <!-- React 18 UMD & Babel Standalone -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Google Fonts Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #fcfaf7;
+            -webkit-tap-highlight-color: transparent;
         }
     </style>
 </head>
@@ -59,7 +60,7 @@
                 rateWSRC: 2150,
                 rateWholesale: 2200,
                 active: true,
-                image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=300&q=80'
+                image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=200&q=80'
             },
             {
                 id: 'demo-2',
@@ -73,7 +74,7 @@
                 rateWSRC: 150,
                 rateWholesale: 155,
                 active: true,
-                image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=300&q=80'
+                image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=200&q=80'
             },
             {
                 id: 'demo-3',
@@ -87,7 +88,7 @@
                 rateWSRC: 1250,
                 rateWholesale: 1300,
                 active: true,
-                image: 'https://images.unsplash.com/photo-1599940824399-b87987ceb72a?auto=format&fit=crop&w=300&q=80'
+                image: 'https://images.unsplash.com/photo-1599940824399-b87987ceb72a?auto=format&fit=crop&w=200&q=80'
             }
         ];
 
@@ -123,40 +124,67 @@
             const [shopCategory, setShopCategory] = useState('All');
 
             useEffect(() => {
-                const handleHashChange = () => {
-                    setHash(window.location.hash || '#admin');
-                };
-                window.addEventListener('hashchange', handleHashChange);
+                const processUrlDataAndLoad = () => {
+                    const currentHash = window.location.hash || '#admin';
+                    setHash(currentHash);
 
-                const savedItems = localStorage.getItem(STORAGE_KEY);
-                if (savedItems) {
-                    try {
-                        const parsed = JSON.parse(savedItems);
-                        setItems(parsed);
-                    } catch (e) {
-                        setItems(DEMO_ITEMS);
+                    // Sync items from URL payload if customer opens shared link
+                    if (currentHash.includes('?data=')) {
+                        try {
+                            const [route, queryStr] = currentHash.split('?data=');
+                            const decoded = JSON.parse(decodeURIComponent(queryStr));
+                            if (decoded.items && Array.isArray(decoded.items)) {
+                                setItems(decoded.items);
+                                localStorage.setItem(STORAGE_KEY, JSON.stringify(decoded.items));
+                            }
+                            if (decoded.config) {
+                                setConfig(decoded.config);
+                                localStorage.setItem(CONFIG_KEY, JSON.stringify(decoded.config));
+                            }
+                            setHash(route);
+                            window.history.replaceState(null, '', route);
+                            return;
+                        } catch (e) {
+                            console.error("URL sync error", e);
+                        }
                     }
-                } else {
-                    setItems(DEMO_ITEMS);
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEMO_ITEMS));
-                }
 
-                const savedConfig = localStorage.getItem(CONFIG_KEY);
-                if (savedConfig) {
-                    try {
-                        setConfig(JSON.parse(savedConfig));
-                    } catch (e) {}
-                }
+                    const savedItems = localStorage.getItem(STORAGE_KEY);
+                    if (savedItems) {
+                        try {
+                            setItems(JSON.parse(savedItems));
+                        } catch (e) {
+                            setItems(DEMO_ITEMS);
+                        }
+                    } else {
+                        setItems(DEMO_ITEMS);
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEMO_ITEMS));
+                    }
 
+                    const savedConfig = localStorage.getItem(CONFIG_KEY);
+                    if (savedConfig) {
+                        try {
+                            setConfig(JSON.parse(savedConfig));
+                        } catch (e) {}
+                    }
+                };
+
+                processUrlDataAndLoad();
                 setLastUpdated(new Date().toLocaleString());
 
+                const handleHashChange = () => processUrlDataAndLoad();
+                window.addEventListener('hashchange', handleHashChange);
                 return () => window.removeEventListener('hashchange', handleHashChange);
             }, []);
 
             const saveItemsToStorage = (newItems) => {
-                setItems(newItems);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(newItems));
-                setLastUpdated(new Date().toLocaleString());
+                try {
+                    setItems(newItems);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(newItems));
+                    setLastUpdated(new Date().toLocaleString());
+                } catch (e) {
+                    alert("Storage full! Try deleting unused items.");
+                }
             };
 
             const saveConfigToStorage = (newConfig) => {
@@ -168,24 +196,40 @@
                 return (Number(item.caseQty || 0) * Number(item.caseSize || 1)) + Number(item.pcsQty || 0);
             };
 
-            const formatStockDisplay = (item) => {
-                const pcs = Number(item.pcsQty || 0);
-                const cases = Number(item.caseQty || 0);
-                const size = Number(item.caseSize || 1);
-                const total = getTotalStockPcs(item);
-                return `${pcs} pcs + ${cases} cases (${size}/case) = Total ${total} pcs`;
-            };
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
 
-            const adjustStock = (id, field, delta) => {
-                const updated = items.map(item => {
-                    if (item.id === id) {
-                        const current = Number(item[field] || 0);
-                        const nextVal = Math.max(0, current + delta);
-                        return { ...item, [field]: nextVal };
-                    }
-                    return item;
-                });
-                saveItemsToStorage(updated);
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const maxDim = 300;
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > height) {
+                            if (width > maxDim) {
+                                height = Math.round((height * maxDim) / width);
+                                width = maxDim;
+                            }
+                        } else {
+                            if (height > maxDim) {
+                                width = Math.round((width * maxDim) / height);
+                                height = maxDim;
+                            }
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        setFormImage(canvas.toDataURL('image/jpeg', 0.7));
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
             };
 
             const startEdit = (item) => {
@@ -219,17 +263,6 @@
                 setFormImage('');
             };
 
-            const handleImageUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        setFormImage(reader.result);
-                    };
-                    reader.readAsDataURL(file);
-                }
-            };
-
             const handleSaveItem = (e) => {
                 e.preventDefault();
                 if (!formName.trim()) return;
@@ -246,7 +279,7 @@
                     rateWSRC: Number(formRateWSRC) || 0,
                     rateWholesale: Number(formRateWholesale) || 0,
                     active: formActive,
-                    image: formImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=300&q=80'
+                    image: formImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80'
                 };
 
                 let updated;
@@ -323,8 +356,9 @@
             };
 
             const getClassInfo = (h) => {
-                if (h === '#shop-wsrc') return { name: 'WS RC', classKey: 'rateWSRC', color: 'bg-blue-600', badgeColor: 'bg-blue-100 text-blue-800', border: 'border-blue-600', text: 'text-blue-600' };
-                if (h === '#shop-wholesale') return { name: 'WHOLESALE', classKey: 'rateWholesale', color: 'bg-emerald-600', badgeColor: 'bg-emerald-100 text-emerald-800', border: 'border-emerald-600', text: 'text-emerald-600' };
+                const cleanHash = (h || '#admin').toLowerCase();
+                if (cleanHash.startsWith('#shop-wsrc')) return { name: 'WS RC', classKey: 'rateWSRC', color: 'bg-blue-600', badgeColor: 'bg-blue-100 text-blue-800', border: 'border-blue-600', text: 'text-blue-600' };
+                if (cleanHash.startsWith('#shop-wholesale')) return { name: 'WHOLESALE', classKey: 'rateWholesale', color: 'bg-emerald-600', badgeColor: 'bg-emerald-100 text-emerald-800', border: 'border-emerald-600', text: 'text-emerald-600' };
                 return { name: 'WS', classKey: 'rateWS', color: 'bg-amber-600', badgeColor: 'bg-amber-100 text-amber-800', border: 'border-amber-600', text: 'text-amber-600' };
             };
 
@@ -388,12 +422,33 @@
 
             const copyCartList = (classInfo) => {
                 const text = generateWhatsAppText(classInfo);
-                navigator.clipboard.writeText(text).then(() => {
-                    alert('Order list copied to clipboard!');
-                });
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        alert('Order list copied to clipboard!');
+                    }).catch(() => {
+                        fallbackCopy(text);
+                    });
+                } else {
+                    fallbackCopy(text);
+                }
             };
 
-            if (hash === '#admin') {
+            const fallbackCopy = (text) => {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+                alert('Order list copied to clipboard!');
+            };
+
+            const generateShareableLink = (shopRoute) => {
+                const payload = encodeURIComponent(JSON.stringify({ config, items }));
+                return `${window.location.origin}${window.location.pathname}${shopRoute}?data=${payload}`;
+            };
+
+            if (hash.toLowerCase().startsWith('#admin')) {
                 if (!isAuthenticated) {
                     return (
                         <div className="min-h-screen flex items-center justify-center p-4 bg-[#fcfaf7]">
@@ -415,6 +470,7 @@
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Enter PIN 1234</label>
                                         <input 
                                             type="password" 
+                                            inputMode="numeric"
                                             maxLength="4"
                                             value={pinInput}
                                             onChange={(e) => setPinInput(e.target.value)}
@@ -489,7 +545,8 @@
                             </div>
 
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                                <h2 className="text-lg font-bold text-gray-900 mb-4">Customer Shop Link Generator (Works on Customer Phones)</h2>
+                                <h2 className="text-lg font-bold text-gray-900 mb-1">Customer Shop Link Generator (Works on Customer Phones)</h2>
+                                <p className="text-xs text-gray-500 mb-4">Click "Copy Link" to send updated live inventory and prices to customers.</p>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="border border-amber-200 bg-amber-50/30 p-4 rounded-xl flex flex-col justify-between">
                                         <div>
@@ -505,8 +562,8 @@
                                             </a>
                                             <button 
                                                 onClick={() => {
-                                                    const url = window.location.origin + window.location.pathname + '#shop-ws';
-                                                    navigator.clipboard.writeText(url);
+                                                    const link = generateShareableLink('#shop-ws');
+                                                    navigator.clipboard.writeText(link);
                                                     alert('WS Shop Link copied! Send this link to customer phone.');
                                                 }}
                                                 className="bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 text-xs font-medium py-2 px-3 rounded-lg transition">
@@ -529,8 +586,8 @@
                                             </a>
                                             <button 
                                                 onClick={() => {
-                                                    const url = window.location.origin + window.location.pathname + '#shop-wsrc';
-                                                    navigator.clipboard.writeText(url);
+                                                    const link = generateShareableLink('#shop-wsrc');
+                                                    navigator.clipboard.writeText(link);
                                                     alert('WS RC Shop Link copied! Send this link to customer phone.');
                                                 }}
                                                 className="bg-white border border-blue-300 hover:bg-blue-100 text-blue-800 text-xs font-medium py-2 px-3 rounded-lg transition">
@@ -553,8 +610,8 @@
                                             </a>
                                             <button 
                                                 onClick={() => {
-                                                    const url = window.location.origin + window.location.pathname + '#shop-wholesale';
-                                                    navigator.clipboard.writeText(url);
+                                                    const link = generateShareableLink('#shop-wholesale');
+                                                    navigator.clipboard.writeText(link);
                                                     alert('WHOLESALE Shop Link copied! Send this link to customer phone.');
                                                 }}
                                                 className="bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 text-xs font-medium py-2 px-3 rounded-lg transition">
@@ -803,7 +860,7 @@
                             </div>
                             <div className="text-right">
                                 <span className="bg-white/20 text-xs font-semibold px-3 py-1.5 rounded-full inline-block">
-                                    ORDER HERE
+                                    Nilambur
                                 </span>
                             </div>
                         </div>
@@ -832,7 +889,6 @@
                             </div>
                         </div>
 
-                        {/* LIST VIEW PRODUCTS */}
                         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-100">
                             {filteredItems.map(item => {
                                 const totalStock = getTotalStockPcs(item);
@@ -867,6 +923,7 @@
                                                         <label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Pcs ({item.unit})</label>
                                                         <input 
                                                             type="number" 
+                                                            inputMode="numeric"
                                                             min="0"
                                                             value={cartItem.pcs || ''}
                                                             onChange={(e) => setCartInput(item.id, 'pcs', e.target.value)}
@@ -878,6 +935,7 @@
                                                         <label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Cases ({item.caseSize}/c)</label>
                                                         <input 
                                                             type="number" 
+                                                            inputMode="numeric"
                                                             min="0"
                                                             value={cartItem.cases || ''}
                                                             onChange={(e) => setCartInput(item.id, 'cases', e.target.value)}
