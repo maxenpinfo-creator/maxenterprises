@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Stock Ordering System - Nilambur</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: '#f59e0b',
+                        wsrc: '#2563eb',
+                        wholesale: '#059669',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- React 18 UMD & Babel Standalone -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcfaf7;
+        }
+    </style>
+</head>
+<body class="bg-[#fcfaf7] text-gray-800 antialiased selection:bg-amber-100 selection:text-amber-800">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const STORAGE_KEY = 'permanent_stock';
+        const CONFIG_KEY = 'stock_system_config';
+
+        const DEFAULT_CONFIG = {
+            businessName: 'Nilambur Wholesale Mart',
+            whatsappNumber: '919847000000',
+        };
+
+        const DEMO_ITEMS = [
+            {
+                id: 'demo-1',
+                name: 'Premium Matta Rice 50kg',
+                category: 'Grains',
+                unit: 'bag',
+                pcsQty: 5,
+                caseQty: 10,
+                caseSize: 25,
+                rateWS: 2100,
+                rateWSRC: 2150,
+                rateWholesale: 2200,
+                active: true,
+                image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=300&q=80'
+            },
+            {
+                id: 'demo-2',
+                name: 'Coconut Oil 1 Litre Bottle',
+                category: 'Oils',
+                unit: 'litre',
+                pcsQty: 12,
+                caseQty: 4,
+                caseSize: 12,
+                rateWS: 145,
+                rateWSRC: 150,
+                rateWholesale: 155,
+                active: true,
+                image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=300&q=80'
+            },
+            {
+                id: 'demo-3',
+                name: 'Cardamom Grade A',
+                category: 'Spices',
+                unit: 'kg',
+                pcsQty: 8,
+                caseQty: 2,
+                caseSize: 10,
+                rateWS: 1200,
+                rateWSRC: 1250,
+                rateWholesale: 1300,
+                active: true,
+                image: 'https://images.unsplash.com/photo-1599940824399-b87987ceb72a?auto=format&fit=crop&w=300&q=80'
+            }
+        ];
+
+        function App() {
+            const [hash, setHash] = useState(window.location.hash || '#admin');
+            const [items, setItems] = useState([]);
+            const [config, setConfig] = useState(DEFAULT_CONFIG);
+            const [lastUpdated, setLastUpdated] = useState('-');
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [pinInput, setPinInput] = useState('');
+            const [pinError, setPinError] = useState(false);
+
+            // Cart state (item.id -> { pcs: number, cases: number })
+            const [cart, setCart] = useState({});
+            const [isCartOpen, setIsCartOpen] = useState(false);
+
+            // Admin Form State
+            const [editingId, setEditingId] = useState(null);
+            const [formName, setFormName] = useState('');
+            const [formCategory, setFormCategory] = useState('Grains');
+            const [formUnit, setFormUnit] = useState('pcs');
+            const [formPcsQty, setFormPcsQty] = useState(0);
+            const [formCaseQty, setFormCaseQty] = useState(0);
+            const [formCaseSize, setFormCaseSize] = useState(12);
+            const [formRateWS, setFormRateWS] = useState('');
+            const [formRateWSRC, setFormRateWSRC] = useState('');
+            const [formRateWholesale, setFormRateWholesale] = useState('');
+            const [formActive, setFormActive] = useState(true);
+            const [formImage, setFormImage] = useState('');
+
+            // Shop filters
+            const [shopSearch, setShopSearch] = useState('');
+            const [shopCategory, setShopCategory] = useState('All');
+
+            useEffect(() => {
+                const handleHashChange = () => {
+                    setHash(window.location.hash || '#admin');
+                };
+                window.addEventListener('hashchange', handleHashChange);
+
+                const savedItems = localStorage.getItem(STORAGE_KEY);
+                if (savedItems) {
+                    try {
+                        const parsed = JSON.parse(savedItems);
+                        setItems(parsed);
+                    } catch (e) {
+                        setItems(DEMO_ITEMS);
+                    }
+                } else {
+                    setItems(DEMO_ITEMS);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEMO_ITEMS));
+                }
+
+                const savedConfig = localStorage.getItem(CONFIG_KEY);
+                if (savedConfig) {
+                    try {
+                        setConfig(JSON.parse(savedConfig));
+                    } catch (e) {}
+                }
+
+                setLastUpdated(new Date().toLocaleString());
+
+                return () => window.removeEventListener('hashchange', handleHashChange);
+            }, []);
+
+            const saveItemsToStorage = (newItems) => {
+                setItems(newItems);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(newItems));
+                setLastUpdated(new Date().toLocaleString());
+            };
+
+            const saveConfigToStorage = (newConfig) => {
+                setConfig(newConfig);
+                localStorage.setItem(CONFIG_KEY, JSON.stringify(newConfig));
+            };
+
+            const getTotalStockPcs = (item) => {
+                return (Number(item.caseQty || 0) * Number(item.caseSize || 1)) + Number(item.pcsQty || 0);
+            };
+
+            const formatStockDisplay = (item) => {
+                const pcs = Number(item.pcsQty || 0);
+                const cases = Number(item.caseQty || 0);
+                const size = Number(item.caseSize || 1);
+                const total = getTotalStockPcs(item);
+                return `${pcs} pcs + ${cases} cases (${size}/case) = Total ${total} pcs`;
+            };
+
+            const adjustStock = (id, field, delta) => {
+                const updated = items.map(item => {
+                    if (item.id === id) {
+                        const current = Number(item[field] || 0);
+                        const nextVal = Math.max(0, current + delta);
+                        return { ...item, [field]: nextVal };
+                    }
+                    return item;
+                });
+                saveItemsToStorage(updated);
+            };
+
+            const startEdit = (item) => {
+                setEditingId(item.id);
+                setFormName(item.name);
+                setFormCategory(item.category);
+                setFormUnit(item.unit);
+                setFormPcsQty(item.pcsQty);
+                setFormCaseQty(item.caseQty);
+                setFormCaseSize(item.caseSize);
+                setFormRateWS(item.rateWS);
+                setFormRateWSRC(item.rateWSRC);
+                setFormRateWholesale(item.rateWholesale);
+                setFormActive(item.active);
+                setFormImage(item.image);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const resetForm = () => {
+                setEditingId(null);
+                setFormName('');
+                setFormCategory('Grains');
+                setFormUnit('pcs');
+                setFormPcsQty(0);
+                setFormCaseQty(0);
+                setFormCaseSize(12);
+                setFormRateWS('');
+                setFormRateWSRC('');
+                setFormRateWholesale('');
+                setFormActive(true);
+                setFormImage('');
+            };
+
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setFormImage(reader.result);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const handleSaveItem = (e) => {
+                e.preventDefault();
+                if (!formName.trim()) return;
+
+                const itemData = {
+                    id: editingId || 'item-' + Date.now(),
+                    name: formName.trim(),
+                    category: formCategory,
+                    unit: formUnit,
+                    pcsQty: Number(formPcsQty) || 0,
+                    caseQty: Number(formCaseQty) || 0,
+                    caseSize: Number(formCaseSize) || 1,
+                    rateWS: Number(formRateWS) || 0,
+                    rateWSRC: Number(formRateWSRC) || 0,
+                    rateWholesale: Number(formRateWholesale) || 0,
+                    active: formActive,
+                    image: formImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=300&q=80'
+                };
+
+                let updated;
+                if (editingId) {
+                    updated = items.map(i => i.id === editingId ? itemData : i);
+                } else {
+                    updated = [itemData, ...items];
+                }
+
+                saveItemsToStorage(updated);
+                resetForm();
+            };
+
+            const handleDeleteItem = (id) => {
+                if (confirm('Are you sure you want to delete this item permanently?')) {
+                    const updated = items.filter(i => i.id !== id);
+                    saveItemsToStorage(updated);
+                }
+            };
+
+            const exportJSON = () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ config, items }, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `stock_backup_${new Date().toISOString().slice(0,10)}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+            };
+
+            const importJSON = (e) => {
+                const fileReader = new FileReader();
+                if (e.target.files[0]) {
+                    fileReader.readAsText(e.target.files[0], "UTF-8");
+                    fileReader.onload = (event) => {
+                        try {
+                            const parsed = JSON.parse(event.target.result);
+                            if (parsed.items && Array.isArray(parsed.items)) {
+                                saveItemsToStorage(parsed.items);
+                            }
+                            if (parsed.config) {
+                                saveConfigToStorage(parsed.config);
+                            }
+                            alert('Data imported successfully!');
+                        } catch (err) {
+                            alert('Invalid JSON file format.');
+                        }
+                    };
+                }
+            };
+
+            const setCartInput = (itemId, type, val) => {
+                const num = Math.max(0, Number(val) || 0);
+                setCart(prev => {
+                    const current = prev[itemId] || { pcs: 0, cases: 0 };
+                    if (num === 0 && current[type === 'pcs' ? 'cases' : 'pcs'] === 0) {
+                        const copy = { ...prev };
+                        delete copy[itemId];
+                        return copy;
+                    }
+                    return {
+                        ...prev,
+                        [itemId]: { ...current, [type]: num }
+                    };
+                });
+            };
+
+            const removeFromCart = (itemId) => {
+                setCart(prev => {
+                    const copy = { ...prev };
+                    delete copy[itemId];
+                    return copy;
+                });
+            };
+
+            const getClassInfo = (h) => {
+                if (h === '#shop-wsrc') return { name: 'WS RC (Regular)', classKey: 'rateWSRC', color: 'bg-blue-600', badgeColor: 'bg-blue-100 text-blue-800', border: 'border-blue-600', text: 'text-blue-600' };
+                if (h === '#shop-wholesale') return { name: 'WHOLESALE', classKey: 'rateWholesale', color: 'bg-emerald-600', badgeColor: 'bg-emerald-100 text-emerald-800', border: 'border-emerald-600', text: 'text-emerald-600' };
+                return { name: 'WS (Premium)', classKey: 'rateWS', color: 'bg-amber-600', badgeColor: 'bg-amber-100 text-amber-800', border: 'border-amber-600', text: 'text-amber-600' };
+            };
+
+            const getCartCalculations = (classKey) => {
+                let totalAmount = 0;
+                let totalItemsCount = 0;
+                const lines = [];
+
+                Object.entries(cart).forEach(([id, q]) => {
+                    const item = items.find(i => i.id === id);
+                    if (!item) return;
+
+                    const pcs = q.pcs || 0;
+                    const cases = q.cases || 0;
+                    const caseSize = Number(item.caseSize || 1);
+                    const totalPcs = (cases * caseSize) + pcs;
+                    if (totalPcs <= 0) return;
+
+                    const rate = Number(item[classKey] || 0);
+                    const lineTotal = totalPcs * rate;
+                    totalAmount += lineTotal;
+                    totalItemsCount += 1;
+
+                    let breakdownStr = '';
+                    if (cases > 0 && pcs > 0) {
+                        breakdownStr = `${cases} Cases (${cases * caseSize} pcs) + ${pcs} pcs = ${totalPcs} ${item.unit}`;
+                    } else if (cases > 0) {
+                        breakdownStr = `${cases} Cases (${totalPcs} ${item.unit})`;
+                    } else {
+                        breakdownStr = `${pcs} ${item.unit}`;
+                    }
+
+                    lines.push({
+                        name: item.name,
+                        breakdown: breakdownStr,
+                        totalPcs,
+                        rate,
+                        lineTotal,
+                        unit: item.unit
+                    });
+                });
+
+                return { totalAmount, totalItemsCount, lines };
+            };
+
+            const generateWhatsAppText = (classInfo) => {
+                const { totalAmount, lines } = getCartCalculations(classInfo.classKey);
+                const dateStr = new Date().toLocaleDateString('en-GB');
+
+                let text = `*${config.businessName} - ${classInfo.name} Order*\n`;
+                text += `Date: ${dateStr}\n\n`;
+
+                lines.forEach((l, idx) => {
+                    text += `${idx + 1}. ${l.name} - ${l.breakdown} x Rs.${l.rate} = Rs.${l.lineTotal}\n`;
+                });
+
+                text += `\nTotal: Rs.${totalAmount}\n`;
+                text += `Class: ${classInfo.name}`;
+                return text;
+            };
+
+            const copyCartList = (classInfo) => {
+                const text = generateWhatsAppText(classInfo);
+                navigator.clipboard.writeText(text).then(() => {
+                    alert('Order list copied to clipboard!');
+                });
+            };
+
+            if (hash === '#admin') {
+                if (!isAuthenticated) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center p-4 bg-[#fcfaf7]">
+                            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 max-w-md w-full">
+                                <div className="text-center mb-6">
+                                    <h1 className="text-2xl font-bold text-gray-900">Admin Login</h1>
+                                    <p className="text-sm text-gray-500 mt-1">Nilambur Wholesale Stock System</p>
+                                </div>
+                                <form onSubmit={(e) => {
+                                    e.preventDefault();
+                                    if (pinInput === '1234') {
+                                        setIsAuthenticated(true);
+                                        setPinError(false);
+                                    } else {
+                                        setPinError(true);
+                                    }
+                                }}>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Enter PIN (1234)</label>
+                                        <input 
+                                            type="password" 
+                                            maxLength="4"
+                                            value={pinInput}
+                                            onChange={(e) => setPinInput(e.target.value)}
+                                            className="w-full text-center text-2xl tracking-widest px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                            placeholder="••••"
+                                            autoFocus
+                                        />
+                                        {pinError && <p className="text-red-500 text-xs mt-2 text-center">Incorrect PIN. Try 1234</p>}
+                                    </div>
+                                    <button type="submit" className="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-3 rounded-xl transition shadow-sm">
+                                        Login to Admin
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="min-h-screen pb-24 bg-[#fcfaf7]">
+                        <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+                            <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                <div>
+                                    <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+                                    <p className="text-xs text-gray-500">Nilambur Wholesale Distribution</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-full">
+                                        {items.length} items permanently saved
+                                    </span>
+                                    <button 
+                                        onClick={() => setIsAuthenticated(false)}
+                                        className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl text-gray-700 font-medium transition">
+                                        Lock
+                                    </button>
+                                </div>
+                            </div>
+                        </header>
+
+                        <main className="max-w-7xl mx-auto px-4 py-6 space-y-8">
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Business Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={config.businessName}
+                                        onChange={(e) => saveConfigToStorage({ ...config, businessName: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">WhatsApp Number (with country code)</label>
+                                    <input 
+                                        type="text" 
+                                        value={config.whatsappNumber}
+                                        onChange={(e) => saveConfigToStorage({ ...config, whatsappNumber: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
+                                        placeholder="919847000000"
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={exportJSON}
+                                        className="flex-1 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium py-2 px-3 rounded-xl transition">
+                                        Export JSON
+                                    </button>
+                                    <label className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-medium py-2 px-3 rounded-xl transition text-center cursor-pointer">
+                                        Import JSON
+                                        <input type="file" accept=".json" onChange={importJSON} className="hidden" />
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                                <h2 className="text-lg font-bold text-gray-900 mb-4">Customer Shop Link Generator (Works on Customer Phones)</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="border border-amber-200 bg-amber-50/30 p-4 rounded-xl flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="font-bold text-amber-800">Class 1: WS (Premium)</span>
+                                                <span className="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-medium">Gold</span>
+                                            </div>
+                                            <p className="text-xs text-gray-600 mb-4">{items.length} items visible</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <a href="#shop-ws" className="flex-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium py-2 px-3 rounded-lg text-center transition">
+                                                Open Shop
+                                            </a>
+                                            <button 
+                                                onClick={() => {
+                                                    const url = window.location.origin + window.location.pathname + '#shop-ws';
+                                                    navigator.clipboard.writeText(url);
+                                                    alert('WS Shop Link copied! Send this link to customer phone.');
+                                                }}
+                                                className="bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 text-xs font-medium py-2 px-3 rounded-lg transition">
+                                                Copy Link
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="border border-blue-200 bg-blue-50/30 p-4 rounded-xl flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="font-bold text-blue-800">Class 2: WS RC (Regular)</span>
+                                                <span className="text-xs bg-blue-200 text-blue-900 px-2 py-0.5 rounded-full font-medium">Blue</span>
+                                            </div>
+                                            <p className="text-xs text-gray-600 mb-4">{items.length} items visible</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <a href="#shop-wsrc" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-2 px-3 rounded-lg text-center transition">
+                                                Open Shop
+                                            </a>
+                                            <button 
+                                                onClick={() => {
+                                                    const url = window.location.origin + window.location.pathname + '#shop-wsrc';
+                                                    navigator.clipboard.writeText(url);
+                                                    alert('WS RC Shop Link copied! Send this link to customer phone.');
+                                                }}
+                                                className="bg-white border border-blue-300 hover:bg-blue-100 text-blue-800 text-xs font-medium py-2 px-3 rounded-lg transition">
+                                                Copy Link
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="border border-emerald-200 bg-emerald-50/30 p-4 rounded-xl flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="font-bold text-emerald-800">Class 3: WHOLESALE</span>
+                                                <span className="text-xs bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-medium">Emerald</span>
+                                            </div>
+                                            <p className="text-xs text-gray-600 mb-4">{items.length} items visible</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <a href="#shop-wholesale" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium py-2 px-3 rounded-lg text-center transition">
+                                                Open Shop
+                                            </a>
+                                            <button 
+                                                onClick={() => {
+                                                    const url = window.location.origin + window.location.pathname + '#shop-wholesale';
+                                                    navigator.clipboard.writeText(url);
+                                                    alert('WHOLESALE Shop Link copied! Send this link to customer phone.');
+                                                }}
+                                                className="bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 text-xs font-medium py-2 px-3 rounded-lg transition">
+                                                Copy Link
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                                <h2 className="text-lg font-bold text-gray-900 mb-4">
+                                    {editingId ? 'Edit Stock Item' : 'Add New Permanent Item'}
+                                </h2>
+                                <form onSubmit={handleSaveItem} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="sm:col-span-2">
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Item Name *</label>
+                                        <input 
+                                            type="text" 
+                                            required
+                                            value={formName}
+                                            onChange={(e) => setFormName(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
+                                            placeholder="e.g. Premium Matta Rice 50kg"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Category</label>
+                                        <input 
+                                            type="text" 
+                                            value={formCategory}
+                                            onChange={(e) => setFormCategory(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
+                                            placeholder="e.g. Grains, Oils, Spices"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Unit</label>
+                                        <select 
+                                            value={formUnit}
+                                            onChange={(e) => setFormUnit(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm bg-white">
+                                            <option value="pcs">pcs</option>
+                                            <option value="kg">kg</option>
+                                            <option value="litre">litre</option>
+                                            <option value="box">box</option>
+                                            <option value="bag">bag</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Loose Pcs Qty</label>
+                                        <input 
+                                            type="number" 
+                                            min="0"
+                                            value={formPcsQty}
+                                            onChange={(e) => setFormPcsQty(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Case Qty</label>
+                                        <input 
+                                            type="number" 
+                                            min="0"
+                                            value={formCaseQty}
+                                            onChange={(e) => setFormCaseQty(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Case Size (pcs per case)</label>
+                                        <input 
+                                            type="number" 
+                                            min="1"
+                                            value={formCaseSize}
+                                            onChange={(e) => setFormCaseSize(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Status</label>
+                                        <select 
+                                            value={formActive ? 'true' : 'false'}
+                                            onChange={(e) => setFormActive(e.target.value === 'true')}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm bg-white">
+                                            <option value="true">Active</option>
+                                            <option value="false">Inactive</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-semibold text-amber-700 uppercase mb-1">Rate WS (₹)</label>
+                                        <input 
+                                            type="number" 
+                                            step="0.01"
+                                            required
+                                            value={formRateWS}
+                                            onChange={(e) => setFormRateWS(e.target.value)}
+                                            className="w-full px-3 py-2 border border-amber-200 bg-amber-50/20 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm font-semibold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-blue-700 uppercase mb-1">Rate WS RC (₹)</label>
+                                        <input 
+                                            type="number" 
+                                            step="0.01"
+                                            required
+                                            value={formRateWSRC}
+                                            onChange={(e) => setFormRateWSRC(e.target.value)}
+                                            className="w-full px-3 py-2 border border-blue-200 bg-blue-50/20 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm font-semibold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-emerald-700 uppercase mb-1">Rate WHOLESALE (₹)</label>
+                                        <input 
+                                            type="number" 
+                                            step="0.01"
+                                            required
+                                            value={formRateWholesale}
+                                            onChange={(e) => setFormRateWholesale(e.target.value)}
+                                            className="w-full px-3 py-2 border border-emerald-200 bg-emerald-50/20 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm font-semibold"
+                                        />
+                                    </div>
+
+                                    <div className="sm:col-span-2">
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Product Image</label>
+                                        <div className="flex items-center gap-3">
+                                            {formImage && (
+                                                <img src={formImage} alt="Preview" className="w-12 h-12 object-cover rounded-lg border border-gray-200" />
+                                            )}
+                                            <input 
+                                                type="file" 
+                                                accept="image/*"
+                                                onChange={handleImageUpload}
+                                                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="sm:col-span-2 flex items-end gap-2">
+                                        <button 
+                                            type="submit"
+                                            className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 px-4 rounded-xl transition shadow-sm text-sm">
+                                            {editingId ? 'Update Permanent Item' : 'Save Permanently'}
+                                        </button>
+                                        {editingId && (
+                                            <button 
+                                                type="button"
+                                                onClick={resetForm}
+                                                className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2.5 px-4 rounded-xl transition text-sm">
+                                                Cancel
+                                            </button>
+                                        )}
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-lg font-bold text-gray-900">Permanent Stock Inventory ({items.length})</h2>
+                                    <span className="text-xs text-gray-400">Last updated: {lastUpdated}</span>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {items.map(item => {
+                                        return (
+                                            <div key={item.id} className="border border-gray-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition">
+                                                <div>
+                                                    <div className="flex gap-3 mb-3">
+                                                        <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded-xl border border-gray-100 shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex justify-between items-start">
+                                                                <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">{item.category}</span>
+                                                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${item.active ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                                                    {item.active ? 'Active' : 'Inactive'}
+                                                                </span>
+                                                            </div>
+                                                            <h3 className="font-bold text-gray-900 truncate mt-1 text-sm">{item.name}</h3>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-3 gap-1 bg-gray-50 p-2 rounded-xl text-center mb-3 text-xs">
+                                                        <div>
+                                                            <div className="text-[10px] text-gray-400 font-medium">WS</div>
+                                                            <div className="font-bold text-amber-700">₹{item.rateWS}</div>
+                                                        </div>
+                                                        <div className="border-x border-gray-200">
+                                                            <div className="text-[10px] text-gray-400 font-medium">WSRC</div>
+                                                            <div className="font-bold text-blue-700">₹{item.rateWSRC}</div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-[10px] text-gray-400 font-medium">WHOLE</div>
+                                                            <div className="font-bold text-emerald-700">₹{item.rateWholesale}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-2 pt-2 border-t border-gray-100">
+                                                    <button 
+                                                        onClick={() => startEdit(item)}
+                                                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium py-1.5 rounded-lg transition">
+                                                        Edit
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleDeleteItem(item.id)}
+                                                        className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium px-3 py-1.5 rounded-lg transition">
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {items.length === 0 && (
+                                        <div className="col-span-full py-12 text-center text-gray-400">
+                                            No stock items added yet. Use the form above to add your first item.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                );
+            }
+
+            const classInfo = getClassInfo(hash);
+            const categories = ['All', ...new Set(items.map(i => i.category))];
+
+            const filteredItems = items.filter(item => {
+                if (!item.active) return false;
+                const matchesSearch = item.name.toLowerCase().includes(shopSearch.toLowerCase()) || 
+                                      item.category.toLowerCase().includes(shopSearch.toLowerCase());
+                const matchesCategory = shopCategory === 'All' || item.category === shopCategory;
+                return matchesSearch && matchesCategory;
+            });
+
+            const { totalAmount, totalItemsCount, lines } = getCartCalculations(classInfo.classKey);
+
+            return (
+                <div className="min-h-screen pb-36 bg-[#fcfaf7]">
+                    <header className={`text-white ${classInfo.color} sticky top-0 z-30 shadow-md`}>
+                        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+                            <div>
+                                <h1 className="text-lg font-bold">WS Price List</h1>
+                                <p className="text-xs text-white/80">{config.businessName} — {classInfo.name}</p>
+                            </div>
+                            <div className="text-right">
+                                <span className="bg-white/20 text-xs font-semibold px-3 py-1.5 rounded-full inline-block">
+                                    Nilambur Wholesale
+                                </span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <div className="flex-1">
+                                <input 
+                                    type="text" 
+                                    value={shopSearch}
+                                    onChange={(e) => setShopSearch(e.target.value)}
+                                    placeholder="Search products by name or category..." 
+                                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-gray-800 focus:outline-none text-sm shadow-sm"
+                                />
+                            </div>
+                            <div className="sm:w-48">
+                                <select 
+                                    value={shopCategory}
+                                    onChange={(e) => setShopCategory(e.target.value)}
+                                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-gray-800 focus:outline-none text-sm shadow-sm">
+                                    {categories.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* LIST VIEW PRODUCTS */}
+                        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-100">
+                            {filteredItems.map(item => {
+                                const totalStock = getTotalStockPcs(item);
+                                const isOutOfStock = totalStock <= 0;
+                                const rate = item[classInfo.classKey] || 0;
+                                const cartItem = cart[item.id] || { pcs: 0, cases: 0 };
+
+                                return (
+                                    <div key={item.id} className={`p-4 flex flex-col sm:flex-row items-center justify-between gap-4 transition ${isOutOfStock ? 'opacity-60 bg-gray-50' : 'hover:bg-gray-50/50'}`}>
+                                        <div className="flex items-center gap-4 w-full sm:w-auto flex-1">
+                                            <div className="relative shrink-0">
+                                                <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded-xl border border-gray-100" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">{item.category}</span>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isOutOfStock ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                        {isOutOfStock ? 'Out of Stock' : `In Stock: Total ${totalStock}`}
+                                                    </span>
+                                                </div>
+                                                <h3 className="font-bold text-gray-900 text-sm truncate">{item.name}</h3>
+                                                <div className="text-base font-extrabold text-gray-900 mt-0.5">
+                                                    ₹{rate} <span className="text-xs font-normal text-gray-500">/ {item.unit}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {!isOutOfStock ? (
+                                            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                                                <div className="flex gap-2">
+                                                    <div className="w-24">
+                                                        <label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Pcs ({item.unit})</label>
+                                                        <input 
+                                                            type="number" 
+                                                            min="0"
+                                                            value={cartItem.pcs || ''}
+                                                            onChange={(e) => setCartInput(item.id, 'pcs', e.target.value)}
+                                                            placeholder="0"
+                                                            className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-center font-semibold text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="w-24">
+                                                        <label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Cases ({item.caseSize}/c)</label>
+                                                        <input 
+                                                            type="number" 
+                                                            min="0"
+                                                            value={cartItem.cases || ''}
+                                                            onChange={(e) => setCartInput(item.id, 'cases', e.target.value)}
+                                                            placeholder="0"
+                                                            className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-center font-semibold text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-red-50 text-red-600 text-xs font-semibold py-2 px-4 rounded-xl shrink-0">
+                                                Out of Stock
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            {filteredItems.length === 0 && (
+                                <div className="py-16 text-center text-gray-400">
+                                    No products found matching your search.
+                                </div>
+                            )}
+                        </div>
+                    </main>
+
+                    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-40 transition-all">
+                        {isCartOpen && (
+                            <div className="max-h-96 overflow-y-auto p-4 border-b border-gray-100 bg-gray-50 space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-gray-900 text-sm">Order Summary ({totalItemsCount} items)</h3>
+                                    <button onClick={() => setIsCartOpen(false)} className="text-xs text-gray-500 font-semibold hover:text-gray-800">Close ✕</button>
+                                </div>
+                                {lines.map((l, idx) => (
+                                    <div key={idx} className="bg-white p-3 rounded-xl border border-gray-200 flex justify-between items-center gap-2">
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-gray-900 text-xs truncate">{l.name}</div>
+                                            <div className="text-[11px] text-gray-500">{l.breakdown} x ₹{l.rate}</div>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <div className="font-bold text-gray-900 text-xs">₹{l.lineTotal}</div>
+                                            <button 
+                                                onClick={() => {
+                                                    const itemObj = items.find(i => i.name === l.name);
+                                                    if (itemObj) removeFromCart(itemObj.id);
+                                                }}
+                                                className="text-[10px] text-red-500 hover:underline">
+                                                Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {lines.length === 0 && (
+                                    <div className="text-center py-6 text-gray-400 text-xs">Your order list is empty. Add quantities above.</div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="max-w-4xl mx-auto p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                                <button 
+                                    onClick={() => setIsCartOpen(!isCartOpen)}
+                                    className="flex items-center gap-2 text-left">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold ${classInfo.color}`}>
+                                        {totalItemsCount}
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-gray-500 font-medium">Total Amount</div>
+                                        <div className="text-lg font-extrabold text-gray-900">₹{totalAmount}</div>
+                                    </div>
+                                </button>
+                                <button 
+                                    onClick={() => setIsCartOpen(!isCartOpen)}
+                                    className="text-xs text-gray-600 underline sm:hidden">
+                                    {isCartOpen ? 'Hide List' : 'View List'}
+                                </button>
+                            </div>
+
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <button 
+                                    onClick={() => copyCartList(classInfo)}
+                                    disabled={totalItemsCount === 0}
+                                    className={`w-full sm:w-auto px-6 py-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2 ${totalItemsCount > 0 ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                                    <span>Copy List</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
